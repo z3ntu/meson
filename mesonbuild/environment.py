@@ -60,6 +60,7 @@ from .compilers import (
     IntelFortranCompiler,
     JavaCompiler,
     MonoCompiler,
+    CudaCompiler,
     VisualStudioCsCompiler,
     NAGFortranCompiler,
     Open64FortranCompiler,
@@ -88,6 +89,17 @@ known_cpu_families = (
     'x86',
     'x86_64'
 )
+
+# Environment variables that each lang uses.
+cflags_mapping = {'c': 'CFLAGS',
+                  'cpp': 'CXXFLAGS',
+                  'cu': 'CUFLAGS',
+                  'objc': 'OBJCFLAGS',
+                  'objcpp': 'OBJCXXFLAGS',
+                  'fortran': 'FFLAGS',
+                  'd': 'DFLAGS',
+                  'vala': 'VALAFLAGS'}
+
 
 def detect_gcovr(version='3.1', log=False):
     gcovr_exe = 'gcovr'
@@ -328,10 +340,12 @@ class Environment:
             self.default_cs = ['mcs', 'csc']
         self.default_objc = ['cc']
         self.default_objcpp = ['c++']
+        self.default_cuda = ['nvcc']
         self.default_fortran = ['gfortran', 'g95', 'f95', 'f90', 'f77', 'ifort']
         self.default_rust = ['rustc']
         self.default_static_linker = ['ar']
         self.vs_static_linker = ['lib']
+        self.cuda_static_linker = ['nvlink']
         self.gcc_static_linker = ['gcc-ar']
         self.clang_static_linker = ['llvm-ar']
 
@@ -620,6 +634,25 @@ This is probably wrong, it should always point to the native compiler.''' % evar
     def detect_cpp_compiler(self, want_cross):
         return self._detect_c_or_cpp_compiler('cpp', 'CXX', want_cross)
 
+    def detect_cuda_compiler(self, want_cross):
+        popen_exceptions = {}
+        compilers, ccache, is_cross, exe_wrap = self._get_compilers('cuda', 'Cuda', want_cross)
+        for compiler in compilers:
+            if isinstance(compiler, str):
+                compiler = [compiler]
+            else:
+                raise EnvironmentException()
+            arg = '--version'
+            try:
+                p, out, err = Popen_safe(compiler + [arg])
+            except OSError as e:
+                popen_exceptions[' '.join(compiler + [arg])] = e
+                continue
+            version = search_version(out)
+            cls = CudaCompiler
+            return cls(ccache + compiler, version, is_cross, exe_wrap)
+        raise EnvironmentException('Could not find suitable CUDA compiler: "' + ' '.join(compilers) + '"')
+
     def detect_fortran_compiler(self, want_cross):
         popen_exceptions = {}
         compilers, ccache, is_cross, exe_wrap = self._get_compilers('fortran', 'FC', want_cross)
@@ -856,7 +889,9 @@ This is probably wrong, it should always point to the native compiler.''' % evar
             linkers = [linker]
         else:
             evar = 'AR'
-            if evar in os.environ:
+            if isinstance(compiler, compilers.CudaCompiler):
+                linkers = [self.cuda_static_linker, self.default_static_linker]
+            elif evar in os.environ:
                 linkers = [shlex.split(os.environ[evar])]
             elif isinstance(compiler, compilers.VisualStudioCCompiler):
                 linkers = [self.vs_static_linker]

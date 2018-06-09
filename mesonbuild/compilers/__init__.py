@@ -77,6 +77,7 @@ __all__ = [
     'JavaCompiler',
     'LLVMDCompiler',
     'MonoCompiler',
+    'NvidiaCudaCompiler',
     'VisualStudioCsCompiler',
     'NAGFortranCompiler',
     'ObjCCompiler',
@@ -154,6 +155,7 @@ from .d import (
     GnuDCompiler,
     LLVMDCompiler,
 )
+from .cuda import CudaCompiler
 from .fortran import (
     FortranCompiler,
     G95FortranCompiler,
